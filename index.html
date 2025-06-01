@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US Federal Budget Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Visualization & Content Choices: 
+        - Main/Subcategory Allocation -> Goal: Inform, Compare, Interact -> Viz/Method: HTML sliders, nested for subcategories. -> Interaction: Drag slider, toggle mode, expand/collapse subcategories. -> Justification: Granular control, direct manipulation. -> Library/Method: Vanilla JS & HTML.
+        - Hover Explanations -> Goal: Inform -> Viz/Method: Custom tooltip. -> Interaction: Mouse hover on info icons. -> Justification: Contextual, on-demand detail. -> Library/Method: Vanilla JS & HTML/CSS.
+        - Granular Consequences -> Goal: Inform, Show Relationships -> Viz/Method: Dynamic list, includes subcategory consequences. Log auto-scrolls to top. NEW: "Most Recent Impact" display in slider panel. -> Interaction: Real-time log. -> Justification: Immediate, detailed trade-off feedback. -> Library/Method: Vanilla JS DOM.
+        - (Other features as previously defined)
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+        .slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #3B82F6;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        .slider-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #E5E7EB;
+            border-radius: 9999px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #3B82F6;
+            cursor: pointer;
+            border-radius: 50%;
+            margin-top: -6px; 
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #3B82F6;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        .modal-content {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3B82F6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .ai-button {
+            text-decoration: none !important;
+            border: none !important;
+            padding: 0.25rem !important; 
+            border-radius: 9999px !important; 
+            transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter !important;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition-duration: 150ms !important;
+        }
+        .ai-button:hover {
+             background-color: #E0F2FE !important; 
+        }
+        .toggle-label {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border: 1px solid #D1D5DB; 
+            border-radius: 0.375rem; 
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .toggle-label.active {
+            background-color: #3B82F6; 
+            color: white;
+            border-color: #3B82F6;
+        }
+        .toggle-label:not(.active):hover {
+            background-color: #F3F4F6; 
+        }
+        input[type="radio"].toggle-radio {
+            display: none;
+        }
+        .info-icon {
+            cursor: help;
+            margin-left: 0.25rem; /* ml-1 */
+            color: #6B7280; /* Tailwind gray-500 */
+            font-weight: bold;
+        }
+        .info-icon:hover {
+            color: #3B82F6; /* Tailwind blue-500 */
+        }
+        #hover-tooltip {
+            background-color: #1F2937; /* Tailwind gray-800 */
+            color: white;
+            padding: 0.75rem; /* p-3 */
+            border-radius: 0.375rem; /* rounded-md */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-lg */
+            max-width: 300px;
+            font-size: 0.875rem; /* text-sm */
+            line-height: 1.25rem;
+            z-index: 70; /* Ensure it's above other elements */
+        }
+        .expand-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            margin-right: 0.5rem;
+            color: #6B7280; /* gray-500 */
+            transition: transform 0.2s ease-in-out;
+        }
+        .expand-button.expanded {
+            transform: rotate(90deg);
+        }
+        .sub-sliders-container {
+            margin-left: 1.5rem; /* More indentation for subcategories */
+            padding-left: 1rem;
+            border-left: 2px solid #E5E7EB; /* gray-200 */
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+        }
+        #latest-impact-display {
+            padding: 0.75rem; /* p-3 */
+            margin-bottom: 1.5rem; /* mb-6 */
+            border-radius: 0.5rem; /* rounded-lg */
+            min-height: 60px; /* Ensure some space even when empty */
+            transition: background-color 0.3s ease;
+        }
+        #latest-impact-display.decrease {
+            background-color: #FEF2F2; /* Tailwind red-50 */
+            border: 1px solid #FECACA; /* Tailwind red-200 */
+        }
+        #latest-impact-display.increase {
+            background-color: #FFFBEB; /* Tailwind yellow-50 */
+            border: 1px solid #FEF3C7; /* Tailwind yellow-200 */
+        }
+        #latest-impact-display p {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem; /* gap-2 */
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800">
+
+    <div id="app" class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-stone-900">U.S. Federal Budget Simulator</h1>
+            <p class="text-stone-600 mt-2 max-w-3xl mx-auto">Adjust spending, see consequences, and get AI-powered insights & advice.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            
+            <div class="lg:col-span-3 bg-white p-6 rounded-2xl shadow-lg border border-stone-200">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold">Allocate Spending</h2>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-stone-600">View Mode:</span>
+                        <div id="allocation-mode-toggle" class="flex">
+                            <input type="radio" id="mode-percentage" name="allocationMode" value="percentage" class="toggle-radio" checked>
+                            <label for="mode-percentage" class="toggle-label active">%</label>
+                            <input type="radio" id="mode-dollars" name="allocationMode" value="dollars" class="toggle-radio">
+                            <label for="mode-dollars" class="toggle-label">$</label>
+                        </div>
+                        <button id="reset-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors ml-2">Reset</button>
+                    </div>
+                </div>
+                <div id="latest-impact-display" class="text-stone-700">
+                     <p class="italic text-stone-500">Latest impact of your changes will appear here...</p>
+                </div>
+                <div id="sliders-container" class="space-y-6">
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 space-y-8">
+                <div class="bg-white p-6 rounded-2xl shadow-lg border border-stone-200">
+                    <h2 class="text-2xl font-bold text-center mb-4">Budget Breakdown</h2>
+                    <div id="total-display" class="text-center mb-4 p-3 rounded-lg font-semibold text-lg"></div>
+                    <div class="chart-container">
+                        <canvas id="budgetChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-lg border border-stone-200">
+                    <h2 class="text-2xl font-bold mb-4">Consequences Log (Full History)</h2>
+                    <div id="consequences-log" class="space-y-3 h-72 overflow-y-auto pr-2">
+                        <p class="text-stone-500 italic">Adjust spending sliders to see the potential impacts here...</p>
+                    </div>
+                    <button id="generate-analysis-button" class="mt-4 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        ✨ Generate Overall Policy Impact
+                    </button>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-lg border border-stone-200">
+                    <h2 class="text-2xl font-bold mb-3">💡 Need Budgeting Help?</h2>
+                    <p class="text-sm text-stone-600 mb-3">Describe your goal (e.g., "Boost Education by 2% without overspending") and let AI suggest allocation changes.</p>
+                    <textarea id="ai-advice-goal" rows="3" class="w-full p-2 border border-stone-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your budgeting goal..."></textarea>
+                    <button id="get-ai-advice-button" class="mt-3 w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+                        Get AI Advice
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="intro-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full transform transition-all scale-100">
+            <h2 class="text-2xl font-bold mb-4">Welcome to the Budget Simulator!</h2>
+            <p class="text-stone-600 mb-2">
+                Your challenge: Balance the U.S. federal budget. Use sliders to adjust funding for main categories and their subcategories. You can allocate by **Percentage (%)** or **US Dollars ($)**. Aim for **100%** or the **Total Budget Target** in dollars.
+            </p>
+             <p class="text-stone-600 mb-2">
+                The **"Most Recent Impact"** above the sliders shows the immediate effect of your changes. The **"Consequences Log"** on the right keeps a full history.
+            </p>
+            <p class="text-stone-600 mb-2">
+                Hover over "ℹ️" icons for more details on categories.
+            </p>
+            <p class="text-stone-600 mb-4">
+                AI Features:
+                <ul class="list-disc list-inside text-sm text-stone-600 ml-4 space-y-1">
+                    <li>"✨ Generate Overall Policy Impact" for an AI analysis of your budget.</li>
+                    <li>"💡 Need Budgeting Help?" to get AI advice on allocation goals.</li>
+                    <li>"💡" (lightbulb) next to any consequence for an AI explanation.</li>
+                    <li>If you make a drastic cut, "🧠" (brain) for AI suggestions on alternative solutions.</li>
+                </ul>
+            </p>
+            <button id="close-modal-button" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-colors text-lg">Let's Get Started!</button>
+        </div>
+    </div>
+
+    <div id="ai-response-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-[60] hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-xl w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="ai-modal-title" class="text-2xl font-bold text-stone-900">AI Response</h2>
+                <button id="close-ai-response-modal-button" class="text-stone-500 hover:text-stone-700 text-2xl">&times;</button>
+            </div>
+            <div id="ai-modal-content" class="modal-content text-stone-700 space-y-4">
+            </div>
+        </div>
+    </div>
+    
+    <div id="hover-tooltip" class="absolute hidden"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const TOTAL_FEDERAL_BUDGET_USD = 6800000000000; // $6.8 Trillion for FY2024
+            const SUB_CATEGORY_CONSEQUENCE_THRESHOLD_PERCENT_OF_PARENT = 10; 
+
+            const initialBudgetDataRaw = [
+                { 
+                    id: 'defense', name: 'National Defense', baselinePercent: 21, color: '#4A5568', 
+                    description: 'Military, operations, equipment, research.',
+                    hoverExplanation: 'Covers all aspects of the U.S. military including personnel salaries and benefits, weapons procurement, research and development of new technologies, and funding for ongoing military operations worldwide.',
+                    consequences: { decrease: 'Reduced military readiness and slower modernization of equipment.', increase: 'Diverts significant funds from domestic priorities like healthcare and infrastructure.' },
+                    subcategories: [
+                        { id: 'personnel', name: 'Personnel', baselineShareOfParent: 40, hoverExplanation: "Salaries, benefits, housing, and support for active duty and reserve military members.", consequences: { decrease: "Potential recruitment/retention issues, reduced morale.", increase: "Higher personnel costs may limit funds for equipment or operations."} },
+                        { id: 'operations_maintenance', name: 'Operations & Maintenance', baselineShareOfParent: 30, hoverExplanation: "Funding for training exercises, fuel, spare parts, base operations, and ongoing deployments.", consequences: { decrease: "Reduced training frequency, deferred maintenance, lower operational tempo.", increase: "Increased operational capacity, but could be underutilized if not strategically planned."} },
+                        { id: 'procurement', name: 'Procurement', baselineShareOfParent: 20, hoverExplanation: "Acquisition of new military hardware such as aircraft, ships, ground vehicles, and weapon systems.", consequences: { decrease: "Delayed modernization, aging equipment, potential capability gaps.", increase: "Accelerated modernization, but risks cost overruns or acquiring unneeded systems."} },
+                        { id: 'rdte', name: 'Research & Development (RDT&E)', baselineShareOfParent: 10, hoverExplanation: "Investment in future military capabilities through research, development, testing, and evaluation of new technologies.", consequences: { decrease: "Slower technological advancement, risk of falling behind adversaries.", increase: "Potential for breakthrough technologies, but long lead times and uncertain outcomes."} }
+                    ]
+                },
+                { 
+                    id: 'healthcare', name: 'Healthcare', baselinePercent: 25, color: '#48BB78', 
+                    description: 'Medicare, Medicaid, public health.',
+                    hoverExplanation: 'Funds federal health programs: Medicare (health insurance for seniors and some disabled individuals), Medicaid (health coverage for low-income individuals and families), CHIP (Children\'s Health Insurance Program), and public health initiatives through agencies like the CDC and NIH, including biomedical research.',
+                    consequences: { decrease: 'Reduced access to care for seniors and low-income families; less funding for medical research.', increase: 'May strain the national budget, requiring cuts in other essential services if not managed.' },
+                    subcategories: [
+                        { id: 'medicare', name: 'Medicare', baselineShareOfParent: 60, hoverExplanation: "Federal health insurance program primarily for people aged 65 or older, and some younger people with disabilities. Covers hospital stays, doctor visits, and prescription drugs (Part D).", consequences: { decrease: "Higher out-of-pocket costs for seniors, reduced provider payments potentially affecting access.", increase: "Improved benefits or lower premiums for seniors, but contributes to overall healthcare cost growth."}},
+                        { id: 'medicaid_chip', name: 'Medicaid & CHIP', baselineShareOfParent: 30, hoverExplanation: "Provides health coverage to millions of Americans, including eligible low-income adults, children, pregnant women, elderly adults and people with disabilities. CHIP specifically covers children in families with incomes too high for Medicaid but too low for private insurance.", consequences: { decrease: "Reduced eligibility or covered services for low-income populations, increased uncompensated care.", increase: "Expanded coverage for vulnerable populations, improved health outcomes, but higher state/federal costs."}},
+                        { id: 'public_health_research', name: 'Public Health & Research', baselineShareOfParent: 10, hoverExplanation: "Funds for agencies like the Centers for Disease Control and Prevention (CDC), National Institutes of Health (NIH) for biomedical research, substance abuse treatment programs, and mental health services.", consequences: { decrease: "Slower progress in medical breakthroughs, reduced pandemic preparedness.", increase: "Accelerated medical innovation, better public health infrastructure, but long-term payoff." } }
+                    ]
+                },
+                { 
+                    id: 'social_security', name: 'Social Security', baselinePercent: 23, color: '#ED8936', 
+                    description: 'Retirement, disability, survivor benefits.',
+                    hoverExplanation: 'Provides monthly benefits to retired workers, disabled individuals, and survivors of deceased workers. It is primarily funded through dedicated payroll taxes.',
+                    consequences: { decrease: 'Reduced benefits for current and future retirees, impacting their financial security.', increase: 'Requires higher taxes or deeper cuts elsewhere, affecting the broader economy.' },
+                    subcategories: [
+                        { id: 'oasi', name: 'Retirement & Survivors Insurance (OASI)', baselineShareOfParent: 85, hoverExplanation: "Benefits paid to retired workers and their families, as well as to survivors of deceased workers.", consequences: {decrease: "Lower monthly payments for retirees, potential increase in elderly poverty.", increase: "Enhanced financial security for retirees, but strains program solvency without reforms."}},
+                        { id: 'di', name: 'Disability Insurance (DI)', baselineShareOfParent: 13, hoverExplanation: "Benefits paid to workers who have become disabled and are unable to work, and their families.", consequences: {decrease: "Stricter eligibility or lower benefits for disabled individuals.", increase: "Improved support for the disabled, but potential for increased program enrollment."}},
+                        { id: 'admin_ss', name: 'Administrative Costs', baselineShareOfParent: 2, hoverExplanation: "Operational costs for the Social Security Administration to manage and distribute benefits.", consequences: {decrease: "Longer processing times, reduced customer service for beneficiaries.", increase: "Improved efficiency and service, but a small part of overall program costs."}}
+                    ]
+                },
+                { 
+                    id: 'education', name: 'Education', baselinePercent: 4, color: '#9F7AEA', 
+                    description: 'K-12, higher ed, student aid.',
+                    hoverExplanation: 'Supports education from early childhood through postsecondary levels. Includes funding for K-12 programs (like Title I for disadvantaged students), special education, Pell Grants for higher education, student loans, and work-study programs.',
+                    consequences: { decrease: 'Larger class sizes, fewer resources for schools, and reduced access to higher education.', increase: 'Investment in the future, but requires trade-offs with immediate needs today.' },
+                    subcategories: [
+                        { id: 'k12_support', name: 'K-12 Support', baselineShareOfParent: 50, hoverExplanation: "Grants to states and school districts for elementary and secondary education, including Title I for disadvantaged students and IDEA for special education.", consequences: {decrease: "Reduced funding for low-income schools, fewer teachers or resources.", increase: "Improved resources for schools, potentially better student outcomes, but effectiveness depends on implementation."}},
+                        { id: 'higher_ed_aid', name: 'Higher Education & Student Aid', baselineShareOfParent: 40, hoverExplanation: "Funding for Pell Grants, federal student loan programs, work-study assistance, and support for institutions of higher learning.", consequences: {decrease: "Reduced Pell Grant amounts, higher student debt burdens.", increase: "Increased access to college, lower student debt, but higher overall program costs."}},
+                        { id: 'early_childhood', name: 'Early Childhood & Other Programs', baselineShareOfParent: 10, hoverExplanation: "Includes Head Start, childcare assistance programs, and various other educational initiatives and research.", consequences: {decrease: "Fewer children served by Head Start, reduced access to affordable childcare.", increase: "Improved early learning outcomes, better support for working families."}}
+                    ]
+                },
+                { 
+                    id: 'infrastructure', name: 'Infrastructure', baselinePercent: 5, color: '#4299E1', 
+                    description: 'Transport, energy, water, broadband.',
+                    hoverExplanation: 'Investments in physical infrastructure: highways, bridges, public transit, airports, water systems (drinking water and wastewater), the electric grid, and expanding broadband internet access.',
+                    consequences: { decrease: 'Deteriorating roads, bridges, and public transit; risk to water and energy systems.', increase: 'Boosts economy long-term, but requires significant upfront investment, impacting other sectors.' },
+                    subcategories: [
+                        { id: 'transportation_infra', name: 'Transportation', baselineShareOfParent: 60, hoverExplanation: "Funding for highways, bridges, public transit systems, airports, passenger rail, and port infrastructure.", consequences: {decrease: "Worsening road conditions, increased traffic congestion, less reliable public transit.", increase: "Improved transportation networks, reduced travel times, economic benefits, but high upfront costs."}},
+                        { id: 'water_utilities_infra', name: 'Water & Utilities', baselineShareOfParent: 25, hoverExplanation: "Investments in drinking water systems, wastewater treatment facilities, dams, levees, and the electric grid.", consequences: {decrease: "Increased risk of water contamination, power outages, and system failures.", increase: "Safer drinking water, more reliable power grid, but requires substantial investment."}},
+                        { id: 'broadband_comm_infra', name: 'Broadband & Communications', baselineShareOfParent: 15, hoverExplanation: "Funding to expand high-speed internet access, particularly in underserved rural and urban areas, and support communications infrastructure.", consequences: {decrease: "Widening digital divide, limited access to online education and telehealth.", increase: "Improved connectivity, economic opportunities in underserved areas."}}
+                    ]
+                },
+                { 
+                    id: 'environment', name: 'Environment & Energy', baselinePercent: 2, color: '#38A169', 
+                    description: 'Protection, conservation, clean energy.',
+                    hoverExplanation: 'Funds environmental protection (EPA activities), conservation of natural resources (National Park Service, Forest Service), and development of clean and renewable energy technologies.',
+                    consequences: { decrease: 'Weakened environmental protections and reduced investment in renewable energy.', increase: 'Protects natural resources but may face opposition from industries reliant on fossil fuels.' },
+                     subcategories: [
+                        { id: 'epa_regulation', name: 'Environmental Protection & Regulation', baselineShareOfParent: 40, hoverExplanation: "Funding for the Environmental Protection Agency (EPA) for air and water quality programs, hazardous waste cleanup (Superfund), and enforcement of environmental laws.", consequences: {decrease: "Increased pollution, potential health impacts, less enforcement of environmental laws.", increase: "Cleaner air and water, better public health, but potential compliance costs for businesses."}},
+                        { id: 'conservation_resources', name: 'Conservation & Natural Resources', baselineShareOfParent: 35, hoverExplanation: "Management of national parks, forests, wildlife refuges, and other public lands; conservation programs for soil, water, and endangered species.", consequences: {decrease: "Degradation of public lands, loss of biodiversity, reduced recreational opportunities.", increase: "Better protection of natural heritage, enhanced ecosystems, but may limit some economic development."}},
+                        { id: 'energy_dev_research', name: 'Energy Development & Research', baselineShareOfParent: 25, hoverExplanation: "Investment in energy efficiency, renewable energy technologies (solar, wind), nuclear energy research, and fossil fuel research with carbon capture.", consequences: {decrease: "Slower transition to clean energy, continued reliance on fossil fuels.", increase: "Accelerated clean energy deployment, potential for energy independence, but requires R&D investment."}}
+                    ]
+                },
+                { 
+                    id: 'research', name: 'Science & Tech', baselinePercent: 3, color: '#3182CE', 
+                    description: 'Scientific research, tech innovation.',
+                    hoverExplanation: 'Supports a wide range of scientific research through agencies like the National Science Foundation (NSF), NASA (space exploration and research), and Department of Energy research programs, fostering technological innovation.',
+                    consequences: { decrease: 'Loss of competitive edge in technology and science; slower medical and industrial progress.', increase: 'Fuels long-term innovation but takes resources from more immediate social programs.' },
+                    subcategories: [
+                        { id: 'nsf_general_science', name: 'General Science Research (NSF)', baselineShareOfParent: 40, hoverExplanation: "Funding for the National Science Foundation, supporting basic research and education across all fields of science and engineering.", consequences: {decrease: "Fewer grants for basic research, potential brain drain of scientists.", increase: "More scientific discoveries, stronger STEM workforce, but benefits are often long-term."}},
+                        { id: 'nasa_space', name: 'Space Exploration & Research (NASA)', baselineShareOfParent: 35, hoverExplanation: "Funding for NASA's space missions, aeronautics research, and scientific discovery programs related to Earth and space.", consequences: {decrease: "Delayed space missions, reduced Earth observation capabilities.", increase: "Inspiring missions, technological spin-offs, but very high cost per project."}},
+                        { id: 'doe_applied_tech', name: 'Applied Tech & Other Research', baselineShareOfParent: 25, hoverExplanation: "Department of Energy research programs, advanced computing, and other targeted technological innovation initiatives.", consequences: {decrease: "Slower development of new energy technologies or advanced computing.", increase: "Potential breakthroughs in key technology areas, but outcomes are uncertain."}}
+                    ]
+                },
+                { 
+                    id: 'veterans', name: 'Veterans Affairs', baselinePercent: 5, color: '#DD6B20', 
+                    description: 'Healthcare, benefits for veterans.',
+                    hoverExplanation: 'Provides healthcare services, disability compensation, pensions, education benefits (like the GI Bill), housing assistance, and other support services for U.S. military veterans and their families.',
+                    consequences: { decrease: 'Reduced services and longer wait times for veterans seeking care and benefits.', increase: 'Fulfills national promise, but must be balanced with funding for all other citizens.' },
+                    subcategories: [
+                        { id: 'va_medical_care', name: 'Medical Care & Hospitals', baselineShareOfParent: 60, hoverExplanation: "Funding for the Veterans Health Administration (VHA) system, including hospitals, clinics, and mental health services for eligible veterans.", consequences: {decrease: "Longer wait times for appointments, reduced access to specialized care for veterans.", increase: "Improved healthcare access and quality for veterans, but high demand and costs."}},
+                        { id: 'va_disability_pensions', name: 'Disability Compensation & Pensions', baselineShareOfParent: 25, hoverExplanation: "Direct financial support for veterans with service-connected disabilities and for certain low-income wartime veterans.", consequences: {decrease: "Lower benefits or stricter eligibility for disabled veterans.", increase: "Better financial support for disabled veterans, fulfilling a national obligation."}},
+                        { id: 'va_education_other', name: 'Education, Training & Other Support', baselineShareOfParent: 15, hoverExplanation: "Includes funding for GI Bill education benefits, vocational rehabilitation, housing assistance programs, and burial benefits.", consequences: {decrease: "Reduced GI Bill benefits, fewer resources for veteran job training or housing.", increase: "Enhanced opportunities for veterans transitioning to civilian life."}}
+                    ]
+                },
+                { 
+                    id: 'other', name: 'Other Services', baselinePercent: 12, color: '#718096', 
+                    description: 'Agriculture, justice, foreign aid, etc.',
+                    hoverExplanation: 'A broad category including funding for agriculture programs and subsidies, the justice system (federal courts, prisons, FBI), foreign aid and international relations (State Department), general government operations, and various smaller agencies.',
+                    consequences: { decrease: 'Reduced capacity in law enforcement, diplomatic relations, and food safety.', increase: 'Strengthens various essential functions, but can be seen as less critical than major categories.' },
+                    subcategories: [
+                        { id: 'justice_law', name: 'Justice & Law Enforcement', baselineShareOfParent: 30, hoverExplanation: "Funding for federal courts, the Department of Justice (including FBI, DEA), federal prisons, and grants to state/local law enforcement.", consequences: {decrease: "Reduced FBI/DEA capacity, slower court proceedings, underfunded prisons.", increase: "Strengthened federal law enforcement, improved court efficiency, but potential for overreach."}},
+                        { id: 'agriculture_rural', name: 'Agriculture & Rural Development', baselineShareOfParent: 25, hoverExplanation: "Includes farm income support programs, food safety inspection, agricultural research, and rural development initiatives.", consequences: {decrease: "Reduced farm subsidies, potential impact on food prices or rural economies.", increase: "Stronger support for farmers, improved food safety, but can be costly and distort markets."}},
+                        { id: 'international_affairs', name: 'International Affairs & Foreign Aid', baselineShareOfParent: 25, hoverExplanation: "Funding for the State Department, diplomatic missions, foreign economic and military assistance, and contributions to international organizations.", consequences: {decrease: "Weakened diplomatic influence, reduced humanitarian aid, potential instability abroad.", increase: "Stronger global partnerships, enhanced soft power, but can be unpopular domestically."}},
+                        { id: 'general_gov_other', name: 'General Government & Other', baselineShareOfParent: 20, hoverExplanation: "Covers a wide range of functions including tax collection (IRS), federal building management (GSA), legislative branch operations, and various smaller agencies and programs.", consequences: {decrease: "Reduced IRS enforcement, inefficient government operations.", increase: "Improved government efficiency, better tax collection, but often seen as bureaucratic spending."}}
+                    ]
+                },
+            ];
+
+            function processInitialData(rawData) {
+                return rawData.map(mainItem => {
+                    const processedMainItem = {
+                        ...mainItem,
+                        valuePercent: mainItem.baselinePercent,
+                        valueUSD: (mainItem.baselinePercent / 100) * TOTAL_FEDERAL_BUDGET_USD,
+                        originalBaselinePercent: mainItem.baselinePercent,
+                        isExpanded: false 
+                    };
+                    if (mainItem.subcategories) {
+                        let sumOfBaselineShares = mainItem.subcategories.reduce((sum, sub) => sum + sub.baselineShareOfParent, 0);
+                        if (sumOfBaselineShares !== 100 && sumOfBaselineShares > 0) {
+                             mainItem.subcategories.forEach(sub => {
+                                sub.baselineShareOfParent = (sub.baselineShareOfParent / sumOfBaselineShares) * 100;
+                            });
+                        } else if (sumOfBaselineShares === 0 && mainItem.subcategories.length > 0) { 
+                            const equalShare = 100 / mainItem.subcategories.length;
+                            mainItem.subcategories.forEach(sub => sub.baselineShareOfParent = equalShare);
+                        }
+
+                        processedMainItem.subcategories = mainItem.subcategories.map(subItem => ({
+                            ...subItem,
+                            valuePercentOfParent: subItem.baselineShareOfParent,
+                            originalBaselineShareOfParent: subItem.baselineShareOfParent, 
+                            valueUSD: (processedMainItem.valueUSD * subItem.baselineShareOfParent) / 100,
+                            valuePercentOfTotal: (processedMainItem.valuePercent * subItem.baselineShareOfParent) / 100,
+                            parentId: mainItem.id 
+                        }));
+                    }
+                    return processedMainItem;
+                });
+            }
+            
+            let budgetData = processInitialData(initialBudgetDataRaw);
+            let currentSliderBaselines = {}; 
+            let allocationMode = 'percentage'; 
+
+            let chart;
+            const slidersContainer = document.getElementById('sliders-container');
+            const totalDisplay = document.getElementById('total-display');
+            const consequencesLog = document.getElementById('consequences-log');
+            const latestImpactDisplay = document.getElementById('latest-impact-display');
+            const resetButton = document.getElementById('reset-button');
+            const introModal = document.getElementById('intro-modal');
+            const closeModalButton = document.getElementById('close-modal-button');
+            const allocationModeToggle = document.getElementById('allocation-mode-toggle');
+            const hoverTooltip = document.getElementById('hover-tooltip');
+            
+            const generateAnalysisButton = document.getElementById('generate-analysis-button');
+            const aiAdviceGoalInput = document.getElementById('ai-advice-goal');
+            const getAIAdviceButton = document.getElementById('get-ai-advice-button');
+            
+            const aiResponseModal = document.getElementById('ai-response-modal');
+            const aiModalTitle = document.getElementById('ai-modal-title');
+            const aiModalContent = document.getElementById('ai-modal-content');
+            const closeAIResponseModalButton = document.getElementById('close-ai-response-modal-button');
+
+            function formatCurrency(value) {
+                if (value >= 1e12) { return `$${(value / 1e12).toFixed(2)}T`; }
+                if (value >= 1e9) { return `$${(value / 1e9).toFixed(1)}B`; }
+                if (value >= 1e6) { return `$${(value / 1e6).toFixed(0)}M`; }
+                return `$${value.toLocaleString()}`;
+            }
+
+            function storeCurrentBaselinesForConsequences() {
+                budgetData.forEach(item => {
+                    currentSliderBaselines[item.id] = allocationMode === 'percentage' ? item.valuePercent : item.valueUSD;
+                    if (item.subcategories) {
+                        item.subcategories.forEach(subItem => {
+                            currentSliderBaselines[`${item.id}_${subItem.id}`] = subItem.valuePercentOfParent;
+                        });
+                    }
+                });
+            }
+
+            function createSliders() {
+                slidersContainer.innerHTML = '';
+                budgetData.forEach(mainItem => {
+                    const mainCategoryWrapper = document.createElement('div');
+                    mainCategoryWrapper.classList.add('py-2');
+
+                    let mainDisplayValue, mainSliderValue, mainSliderMin, mainSliderMax, mainSliderStep;
+
+                    if (allocationMode === 'percentage') {
+                        mainDisplayValue = `${mainItem.valuePercent.toFixed(1)}%`;
+                        mainSliderValue = mainItem.valuePercent;
+                        mainSliderMin = 0; mainSliderMax = 50; mainSliderStep = 0.1;
+                    } else { 
+                        mainDisplayValue = formatCurrency(mainItem.valueUSD);
+                        mainSliderValue = mainItem.valueUSD;
+                        mainSliderMin = 0; mainSliderMax = TOTAL_FEDERAL_BUDGET_USD * 0.5; mainSliderStep = 10000000000; 
+                    }
+
+                    let expandButtonHtml = '';
+                    if (mainItem.subcategories && mainItem.subcategories.length > 0) {
+                        expandButtonHtml = `<button class="expand-button ${mainItem.isExpanded ? 'expanded' : ''}" data-category-id="${mainItem.id}">${mainItem.isExpanded ? '▼' : '▶'}</button>`;
+                    }
+
+                    mainCategoryWrapper.innerHTML = `
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center">
+                                ${expandButtonHtml}
+                                <label for="${mainItem.id}" class="font-semibold text-lg">${mainItem.name}</label>
+                                <span class="info-icon" data-tooltip-text="${mainItem.hoverExplanation || mainItem.description}">ℹ️</span>
+                            </div>
+                            <span id="${mainItem.id}-value" class="font-bold text-lg text-blue-600">${mainDisplayValue}</span>
+                        </div>
+                        <p class="text-sm text-stone-500 mb-2 ml-8">${mainItem.description}</p>
+                        <input type="range" id="${mainItem.id}" data-type="main" min="${mainSliderMin}" max="${mainSliderMax}" value="${mainSliderValue}" step="${mainSliderStep}" class="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer slider-track">
+                        <div id="${mainItem.id}-subcategories" class="sub-sliders-container mt-3 space-y-4 ${mainItem.isExpanded ? '' : 'hidden'}">
+                        </div>
+                    `;
+                    slidersContainer.appendChild(mainCategoryWrapper);
+
+                    if (mainItem.subcategories && mainItem.isExpanded) {
+                        const subcategoriesContainer = mainCategoryWrapper.querySelector(`#${mainItem.id}-subcategories`);
+                        mainItem.subcategories.forEach(subItem => {
+                            const subSliderWrapper = document.createElement('div');
+                            const subDisplayValue = `${subItem.valuePercentOfParent.toFixed(1)}% <span class='text-xs text-stone-500'>(${allocationMode === 'percentage' ? subItem.valuePercentOfTotal.toFixed(1) + '%' : formatCurrency(subItem.valueUSD)})</span>`;
+                            const subSliderValue = subItem.valuePercentOfParent;
+
+                            subSliderWrapper.innerHTML = `
+                                <div class="flex justify-between items-center mb-1">
+                                     <div class="flex items-center">
+                                        <label for="${mainItem.id}_${subItem.id}" class="font-medium text-md">${subItem.name}</label>
+                                        <span class="info-icon" data-tooltip-text="${subItem.hoverExplanation || subItem.name}">ℹ️</span>
+                                    </div>
+                                    <span id="${mainItem.id}_${subItem.id}-value" class="font-semibold text-md text-sky-700">${subDisplayValue}</span>
+                                </div>
+                                <input type="range" id="${mainItem.id}_${subItem.id}" data-type="sub" data-parent-id="${mainItem.id}" min="0" max="100" value="${subSliderValue}" step="0.1" class="w-full h-2 bg-sky-100 rounded-lg appearance-none cursor-pointer slider-track">
+                            `;
+                            subcategoriesContainer.appendChild(subSliderWrapper);
+                        });
+                    }
+                });
+                storeCurrentBaselinesForConsequences(); 
+                addEventListenersToSlidersAndButtons();
+            }
+            
+            function updateAll(changedElementId = null) {
+                let totalPercent = 0;
+                let totalUSD = 0;
+            
+                budgetData.forEach(mainItem => {
+                    const mainSlider = document.getElementById(mainItem.id);
+                    if (!mainSlider && !(changedElementId && changedElementId.startsWith(mainItem.id + "_"))) {
+                        return;
+                    }
+
+                    if (mainSlider && (!changedElementId || changedElementId === mainItem.id || (changedElementId && changedElementId.startsWith(mainItem.id + "_")))) { 
+                        const mainSliderValue = parseFloat(mainSlider.value);
+                        if (allocationMode === 'percentage') {
+                            mainItem.valuePercent = mainSliderValue;
+                            mainItem.valueUSD = (mainSliderValue / 100) * TOTAL_FEDERAL_BUDGET_USD;
+                        } else {
+                            mainItem.valueUSD = mainSliderValue;
+                            mainItem.valuePercent = (mainSliderValue / TOTAL_FEDERAL_BUDGET_USD) * 100;
+                        }
+                    }
+            
+                    if (mainItem.subcategories) {
+                        let subcategoriesTotalPercentOfParent = 0;
+                        if (changedElementId && changedElementId.startsWith(mainItem.id + "_")) {
+                            const changedSubSlider = document.getElementById(changedElementId);
+                            if (changedSubSlider) {
+                                const subId = changedElementId.split("_")[1];
+                                const changedSub = mainItem.subcategories.find(s => s.id === subId);
+                                if (changedSub) {
+                                    changedSub.valuePercentOfParent = parseFloat(changedSubSlider.value);
+                                }
+                            }
+                        }
+
+                        subcategoriesTotalPercentOfParent = mainItem.subcategories.reduce((sum, sub) => sum + sub.valuePercentOfParent, 0);
+                        if (subcategoriesTotalPercentOfParent > 0) {
+                            mainItem.subcategories.forEach(subItem => {
+                                if (Math.abs(subcategoriesTotalPercentOfParent - 100) > 0.01) {
+                                     subItem.valuePercentOfParent = (subItem.valuePercentOfParent / subcategoriesTotalPercentOfParent) * 100;
+                                }
+                                const subSlider = document.getElementById(`${mainItem.id}_${subItem.id}`);
+                                if (subSlider && Math.abs(parseFloat(subSlider.value) - subItem.valuePercentOfParent) > 0.01) {
+                                   subSlider.value = subItem.valuePercentOfParent.toFixed(1); 
+                                }
+                            });
+                        }
+            
+                        mainItem.subcategories.forEach(subItem => {
+                            subItem.valueUSD = (mainItem.valueUSD * subItem.valuePercentOfParent) / 100;
+                            subItem.valuePercentOfTotal = (mainItem.valuePercent * subItem.valuePercentOfParent) / 100;
+                            const subValueDisplay = document.getElementById(`${mainItem.id}_${subItem.id}-value`);
+                            if (subValueDisplay) {
+                                subValueDisplay.innerHTML = `${subItem.valuePercentOfParent.toFixed(1)}% <span class='text-xs text-stone-500'>(${allocationMode === 'percentage' ? subItem.valuePercentOfTotal.toFixed(1) + '%' : formatCurrency(subItem.valueUSD)})</span>`;
+                            }
+                        });
+                    }
+            
+                    const mainValueDisplay = document.getElementById(`${mainItem.id}-value`);
+                    if (mainValueDisplay) {
+                        if (allocationMode === 'percentage') {
+                            mainValueDisplay.textContent = `${mainItem.valuePercent.toFixed(1)}%`;
+                        } else {
+                            mainValueDisplay.textContent = formatCurrency(mainItem.valueUSD);
+                        }
+                    }
+                    totalPercent += mainItem.valuePercent;
+                    totalUSD += mainItem.valueUSD;
+                });
+            
+                if (allocationMode === 'percentage') {
+                    totalDisplay.textContent = `Total Allocated: ${totalPercent.toFixed(1)}% / 100%`;
+                    generateAnalysisButton.disabled = !(totalPercent >= 95 && totalPercent <= 105);
+                    if (totalPercent > 100.05) {
+                        totalDisplay.classList.remove('bg-blue-100', 'text-blue-800', 'bg-green-100', 'text-green-800');
+                        totalDisplay.classList.add('bg-red-100', 'text-red-800');
+                    } else if (Math.abs(totalPercent - 100) < 0.05) {
+                        totalDisplay.classList.remove('bg-blue-100', 'text-blue-800', 'bg-red-100', 'text-red-800');
+                        totalDisplay.classList.add('bg-green-100', 'text-green-800');
+                    } else {
+                        totalDisplay.classList.remove('bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800');
+                        totalDisplay.classList.add('bg-blue-100', 'text-blue-800');
+                    }
+                } else {
+                    totalDisplay.textContent = `Total Allocated: ${formatCurrency(totalUSD)} / ${formatCurrency(TOTAL_FEDERAL_BUDGET_USD)}`;
+                    const fivePercentOfTotal = TOTAL_FEDERAL_BUDGET_USD * 0.05;
+                    generateAnalysisButton.disabled = !(totalUSD >= TOTAL_FEDERAL_BUDGET_USD - fivePercentOfTotal && totalUSD <= TOTAL_FEDERAL_BUDGET_USD + fivePercentOfTotal);
+                     if (totalUSD > TOTAL_FEDERAL_BUDGET_USD + (TOTAL_FEDERAL_BUDGET_USD * 0.0005) ) { 
+                        totalDisplay.classList.remove('bg-blue-100', 'text-blue-800', 'bg-green-100', 'text-green-800');
+                        totalDisplay.classList.add('bg-red-100', 'text-red-800');
+                    } else if (Math.abs(totalUSD - TOTAL_FEDERAL_BUDGET_USD) < (TOTAL_FEDERAL_BUDGET_USD * 0.0005) ) { 
+                        totalDisplay.classList.remove('bg-blue-100', 'text-blue-800', 'bg-red-100', 'text-red-800');
+                        totalDisplay.classList.add('bg-green-100', 'text-green-800');
+                    } else {
+                         totalDisplay.classList.remove('bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800');
+                        totalDisplay.classList.add('bg-blue-100', 'text-blue-800');
+                    }
+                }
+                updateChart();
+            }
+
+
+            function updateChart() {
+                if (!chart) return;
+                chart.data.labels = budgetData.map(item => item.valuePercent > 0 ? item.name : '').filter(Boolean);
+                chart.data.datasets[0].data = budgetData.map(item => item.valuePercent).filter(v => v > 0);
+                chart.data.datasets[0].backgroundColor = budgetData.filter(item => item.valuePercent > 0).map(item => item.color);
+                
+                chart.options.plugins.tooltip.callbacks.label = function(context) {
+                    let label = context.label || '';
+                    if (label) { label += ': '; }
+                    const currentItem = budgetData.find(d => d.name === context.label);
+                    if (currentItem) {
+                        if (allocationMode === 'percentage') {
+                            label += `${currentItem.valuePercent.toFixed(1)}%`;
+                        } else {
+                            label += `${formatCurrency(currentItem.valueUSD)} (${currentItem.valuePercent.toFixed(1)}%)`;
+                        }
+                    } else { 
+                         label += `${context.parsed.toFixed(1)}% (Data error)`;
+                    }
+                    return label;
+                };
+                chart.update();
+            }
+
+            function logConsequence(item, changeType, isSubcategory = false, parentItemName = null) { 
+                const logEntry = document.createElement('div');
+                logEntry.classList.add('p-3', 'rounded-lg', 'flex', 'items-start', 'gap-2', 'transition-all', 'transform', 'scale-95', 'opacity-0');
+                
+                let iconHtml = '';
+                let consequenceText = '';
+                let isDrasticCut = false; 
+                let displayName = isSubcategory ? `${parentItemName} (${item.name})` : item.name;
+                let latestImpactHTML = '';
+
+                if (changeType === 'decrease') {
+                    logEntry.classList.add('bg-red-50', 'border', 'border-red-200');
+                    iconHtml = `<span class="text-red-500 text-xl font-bold mt-[-2px]">▼</span>`;
+                    consequenceText = `Cutting ${displayName} funding: ${item.consequences.decrease}`;
+                    if (!isSubcategory && item.valuePercent < item.originalBaselinePercent * 0.5) { 
+                        isDrasticCut = true;
+                    }
+                    latestImpactDisplay.className = 'p-3 mb-6 rounded-lg text-stone-700 decrease'; // Add decrease class
+                } else { 
+                    logEntry.classList.add('bg-yellow-50', 'border', 'border-yellow-200');
+                    iconHtml = `<span class="text-yellow-500 text-xl font-bold mt-[-2px]">▲</span>`;
+                    consequenceText = `Increasing ${displayName} funding: ${item.consequences.increase}`;
+                    latestImpactDisplay.className = 'p-3 mb-6 rounded-lg text-stone-700 increase'; // Add increase class
+                }
+                
+                const uniqueIdPart = isSubcategory ? `${item.parentId}_${item.id}` : item.id;
+                const explainButtonId = `explain-${uniqueIdPart}-${Date.now()}`;
+                let buttonsHtml = `
+                    <button id="${explainButtonId}" title="Explain with AI" class="ai-button text-sky-500 hover:bg-sky-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.75a4.25 4.25 0 0 0-4.25 4.25c0 2.65 1.95 4.25 4.25 4.25s4.25-1.6 4.25-4.25A4.25 4.25 0 0 0 12 2.75Z"/><path d="M12 11.25S8.75 13.25 8.75 16H12v5.25S15.25 18.75 15.25 16h-3.25Z"/></svg>
+                    </button>
+                `;
+
+                let suggestAlternativesButtonId = '';
+                if (isDrasticCut) { 
+                    suggestAlternativesButtonId = `suggest-alt-${item.id}-${Date.now()}`;
+                    buttonsHtml += `
+                        <button id="${suggestAlternativesButtonId}" title="Suggest Alternative Solutions" class="ai-button text-orange-500 hover:bg-orange-100 ml-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-6.93 17.07A10 10 0 0 0 12 22a10 10 0 0 0 6.93-2.93A10 10 0 0 0 12 2Z"/><path d="M12 10a2.5 2.5 0 0 0-2.5 2.5c0 .83.42 1.57 1.09 2.02"/><path d="M12 10a2.5 2.5 0 0 1 2.5 2.5c0 .83-.42 1.57-1.09 2.02"/><path d="M14.5 9.04A2.5 2.5 0 0 0 12 7.5a2.5 2.5 0 0 0-2.5 1.54"/><path d="M9.5 9.04A2.5 2.5 0 0 1 12 7.5a2.5 2.5 0 0 1 2.5 1.54"/><path d="M12 14.5a2.5 2.5 0 0 1 2.5-2.5c.83 0 1.57.42 2.02 1.09"/><path d="M12 14.5a2.5 2.5 0 0 0-2.5-2.5c-.83 0-1.57.42-2.02 1.09"/></svg>
+                        </button>
+                    `;
+                }
+                
+                const fullEntryHtml = `
+                    ${iconHtml} 
+                    <p class="text-stone-700 text-sm flex-grow">${consequenceText.replace(/<strong>(.*?)<\/strong>/g, '<span class="font-semibold">$1</span>')}</p>
+                    <div class="flex items-center flex-shrink-0">${buttonsHtml}</div>`;
+                
+                logEntry.innerHTML = fullEntryHtml;
+                latestImpactDisplay.innerHTML = `<p>${fullEntryHtml}</p>`; // Update latest impact display
+
+                const firstChild = consequencesLog.firstChild;
+                if (firstChild && firstChild.nodeName === 'P' && firstChild.classList.contains('italic')) { 
+                    consequencesLog.innerHTML = '';
+                }
+                consequencesLog.prepend(logEntry);
+                consequencesLog.scrollTop = 0; 
+                
+                document.getElementById(explainButtonId).addEventListener('click', () => handleExplainConsequence(consequenceText));
+                if (isDrasticCut && suggestAlternativesButtonId) {
+                    document.getElementById(suggestAlternativesButtonId).addEventListener('click', () => handleSuggestAlternatives(item.name, consequenceText));
+                }
+
+                setTimeout(() => {
+                    logEntry.classList.remove('scale-95', 'opacity-0');
+                    logEntry.classList.add('scale-100', 'opacity-100');
+                }, 10);
+            }
+
+            function initChart() {
+                const ctx = document.getElementById('budgetChart').getContext('2d');
+                chart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: budgetData.map(item => item.name),
+                        datasets: [{
+                            data: budgetData.map(item => item.valuePercent), 
+                            backgroundColor: budgetData.map(item => item.color),
+                            borderColor: '#ffffff',
+                            borderWidth: 2,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { padding: 15, font: { size: 12 }}},
+                            tooltip: { callbacks: { label: (c) => `${c.label || ''}: ${c.parsed || 0}%` }} 
+                        },
+                        cutout: '60%',
+                    }
+                });
+            }
+
+            function handleSliderInteraction(event) {
+                const sliderId = event.target.id;
+                const sliderType = event.target.dataset.type;
+                const newValueRaw = parseFloat(event.target.value); 
+                
+                if (sliderType === 'main') {
+                    const item = budgetData.find(d => d.id === sliderId);
+                    if (!item) return;
+
+                    const previousBaselineValue = currentSliderBaselines[item.id]; 
+                    let currentComparisonValue; 
+                    let previousComparisonValue; 
+
+                    if (allocationMode === 'percentage') {
+                        currentComparisonValue = newValueRaw; 
+                        previousComparisonValue = previousBaselineValue; 
+                    } else { 
+                        currentComparisonValue = (newValueRaw / TOTAL_FEDERAL_BUDGET_USD) * 100; 
+                        previousComparisonValue = (previousBaselineValue / TOTAL_FEDERAL_BUDGET_USD) * 100; 
+                    }
+                    
+                    if (Math.abs(currentComparisonValue - previousComparisonValue) >= 0.1) { 
+                        if (currentComparisonValue < previousComparisonValue) {
+                            logConsequence(item, 'decrease');
+                        } else if (currentComparisonValue > previousComparisonValue) {
+                            logConsequence(item, 'increase');
+                        }
+                    }
+                    currentSliderBaselines[item.id] = newValueRaw; 
+                } else if (sliderType === 'sub') {
+                    const parentId = event.target.dataset.parentId;
+                    const subId = sliderId.split('_')[1];
+                    const parentItem = budgetData.find(p => p.id === parentId);
+                    const subItem = parentItem ? parentItem.subcategories.find(s => s.id === subId) : null;
+
+                    if (!subItem) return;
+
+                    const previousSubBaselineShare = currentSliderBaselines[sliderId]; 
+                    const newSubShare = newValueRaw; 
+
+                    if (Math.abs(newSubShare - previousSubBaselineShare) >= SUB_CATEGORY_CONSEQUENCE_THRESHOLD_PERCENT_OF_PARENT) {
+                        if (newSubShare < previousSubBaselineShare) {
+                            logConsequence(subItem, 'decrease', true, parentItem.name);
+                        } else {
+                            logConsequence(subItem, 'increase', true, parentItem.name);
+                        }
+                    }
+                    currentSliderBaselines[sliderId] = newSubShare;
+                }
+                updateAll(sliderId); 
+            }
+            
+            function resetApp() {
+                allocationMode = 'percentage'; 
+                document.getElementById('mode-percentage').checked = true;
+                document.getElementById('mode-dollars').checked = false;
+                updateToggleLabels();
+
+                budgetData = processInitialData(initialBudgetDataRaw);
+                createSliders(); 
+                updateAll();
+                consequencesLog.innerHTML = `<p class="text-stone-500 italic">Adjust spending sliders to see the potential impacts here...</p>`;
+                latestImpactDisplay.innerHTML = `<p class="italic text-stone-500">Latest impact of your changes will appear here...</p>`;
+                latestImpactDisplay.className = 'p-3 mb-6 rounded-lg text-stone-700'; // Reset class
+                generateAnalysisButton.disabled = true;
+                aiAdviceGoalInput.value = '';
+            }
+
+            function addEventListenersToSlidersAndButtons() {
+                 document.querySelectorAll('input[type="range"]').forEach(slider => {
+                    slider.addEventListener('input', (event) => updateAll(event.target.id)); 
+                    slider.addEventListener('change', handleSliderInteraction);
+                 });
+                 document.querySelectorAll('.expand-button').forEach(button => {
+                    button.addEventListener('click', toggleSubcategories);
+                 });
+                 document.querySelectorAll('.info-icon').forEach(icon => {
+                    icon.addEventListener('mouseover', showTooltip);
+                    icon.addEventListener('mouseout', hideTooltip);
+                    icon.addEventListener('mousemove', moveTooltip);
+                 });
+            }
+
+            function toggleSubcategories(event) {
+                const mainCategoryId = event.target.dataset.categoryId;
+                const mainItem = budgetData.find(item => item.id === mainCategoryId);
+                if (mainItem) {
+                    mainItem.isExpanded = !mainItem.isExpanded;
+                    createSliders(); 
+                    updateAll(); 
+                }
+            }
+
+            function showTooltip(event) {
+                const text = event.target.dataset.tooltipText;
+                if (!text) return;
+                hoverTooltip.innerHTML = text;
+                hoverTooltip.classList.remove('hidden');
+                moveTooltip(event); 
+            }
+
+            function hideTooltip() {
+                hoverTooltip.classList.add('hidden');
+            }
+
+            function moveTooltip(event) {
+                if (!hoverTooltip.classList.contains('hidden')) {
+                    let x = event.clientX + 15;
+                    let y = event.clientY + 15;
+                    const tooltipRect = hoverTooltip.getBoundingClientRect(); 
+                    const bodyRect = document.body.getBoundingClientRect();
+
+                    if (x + tooltipRect.width > bodyRect.width) {
+                        x = event.clientX - tooltipRect.width - 15;
+                    }
+                    if (y + tooltipRect.height > bodyRect.height) {
+                        y = event.clientY - tooltipRect.height - 15;
+                    }
+                    if (x < 0) x = 5;
+                    if (y < 0) y = 5;
+
+                    hoverTooltip.style.left = `${x}px`;
+                    hoverTooltip.style.top = `${y}px`;
+                }
+            }
+            
+            function updateToggleLabels() {
+                document.querySelectorAll('#allocation-mode-toggle label').forEach(label => {
+                    if (label.getAttribute('for') === `mode-${allocationMode}`) {
+                        label.classList.add('active');
+                    } else {
+                        label.classList.remove('active');
+                    }
+                });
+            }
+
+            allocationModeToggle.addEventListener('change', (event) => {
+                allocationMode = event.target.value;
+                updateToggleLabels();
+                createSliders();
+                updateAll();
+            });
+
+
+            async function callGeminiAPI(prompt) {
+                aiModalContent.innerHTML = '<div class="loader"></div> <p class="text-center text-stone-600">AI is thinking, please wait...</p>';
+                aiResponseModal.classList.remove('hidden');
+                
+                let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API Error (${response.status}): ${errorData.error?.message || 'Unknown error'}`);
+                    }
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        aiModalContent.innerHTML = text.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+                    } else {
+                        aiModalContent.innerHTML = '<p class="text-red-600">Could not retrieve a response. The AI output was not in the expected format.</p>';
+                        console.error("Unexpected API response structure:", result);
+                    }
+                } catch (error) {
+                    console.error('Error calling Gemini API:', error);
+                    aiModalContent.innerHTML = `<p class="text-red-600">An error occurred: ${error.message}. Please try again later.</p>`;
+                }
+            }
+            
+            function getBudgetStringForAI() {
+                let summary = [];
+                budgetData.forEach(mainItem => {
+                    let mainStr = `${mainItem.name}: ${mainItem.valuePercent.toFixed(1)}% (${formatCurrency(mainItem.valueUSD)})`;
+                    if (mainItem.subcategories && mainItem.isExpanded && mainItem.subcategories.length > 0) {
+                        const subStrings = mainItem.subcategories.map(sub => 
+                            `  - ${sub.name}: ${sub.valuePercentOfParent.toFixed(1)}% of parent (${sub.valuePercentOfTotal.toFixed(1)}% of total, ${formatCurrency(sub.valueUSD)})`
+                        );
+                        mainStr += "\n" + subStrings.join("\n");
+                    }
+                    summary.push(mainStr);
+                });
+                return summary.join('\n');
+            }
+
+            async function handleGenerateOverallAnalysis() {
+                aiModalTitle.textContent = '✨ Overall Policy Impact Analysis';
+                const budgetSummary = getBudgetStringForAI();
+                const totalAllocationPercent = budgetData.reduce((sum, item) => sum + item.valuePercent, 0);
+                const totalAllocationUSD = budgetData.reduce((sum, item) => sum + item.valueUSD, 0);
+                const prompt = `Analyze the potential broader societal and economic impacts of the following U.S. federal budget allocation. The total allocation is ${totalAllocationPercent.toFixed(1)}% (${formatCurrency(totalAllocationUSD)} out of ${formatCurrency(TOTAL_FEDERAL_BUDGET_USD)}). Focus on the trade-offs and interconnectedness of these decisions. Be concise and aim for 3-4 key paragraphs.\n\nCurrent Budget Details:\n${budgetSummary}`;
+                await callGeminiAPI(prompt);
+            }
+
+            async function handleGetAIAdvice() {
+                const userGoal = aiAdviceGoalInput.value.trim();
+                if (!userGoal) {
+                    aiModalTitle.textContent = '⚠️ Input Needed';
+                    aiModalContent.innerHTML = '<p>Please enter your budgeting goal in the text area first.</p>';
+                    aiResponseModal.classList.remove('hidden');
+                    return;
+                }
+                aiModalTitle.textContent = '💡 AI Budgeting Advice';
+                const budgetSummary = getBudgetStringForAI();
+                const totalAllocationPercent = budgetData.reduce((sum, item) => sum + item.valuePercent, 0);
+                const totalAllocationUSD = budgetData.reduce((sum, item) => sum + item.valueUSD, 0);
+
+                const prompt = `I am working with a U.S. federal budget simulator. My current budget allocation is (Total: ${totalAllocationPercent.toFixed(1)}% / ${formatCurrency(totalAllocationUSD)} out of ${formatCurrency(TOTAL_FEDERAL_BUDGET_USD)}):\n${budgetSummary}\n\nMy specific goal is: "${userGoal}". Please provide concise, actionable advice on which main categories or specific subcategories I might adjust (suggest percentage point changes for main categories or changes in share for subcategories, or approximate dollar amount changes) to achieve this goal while considering potential trade-offs. Keep the advice to 2-3 paragraphs.`;
+                await callGeminiAPI(prompt);
+            }
+
+            async function handleExplainConsequence(consequenceText) {
+                aiModalTitle.textContent = '🔍 AI Explanation of Consequence';
+                const prompt = `Please explain the following U.S. federal budget consequence in more detail. Provide some context or elaborate on its potential real-world implications. Keep the explanation to 1-2 concise paragraphs. The consequence is: "${consequenceText}"`;
+                await callGeminiAPI(prompt);
+            }
+
+            async function handleSuggestAlternatives(categoryName, consequenceText) {
+                aiModalTitle.textContent = '🧠 Alternative Solutions';
+                const budgetSummary = getBudgetStringForAI();
+                const totalAllocationPercent = budgetData.reduce((sum, item) => sum + item.valuePercent, 0);
+                const totalAllocationUSD = budgetData.reduce((sum, item) => sum + item.valueUSD, 0);
+                const prompt = `For the US federal budget, the category '${categoryName}' has been drastically cut, leading to the consequence: '${consequenceText}'. Given the current overall budget allocations (Total: ${totalAllocationPercent.toFixed(1)}% / ${formatCurrency(totalAllocationUSD)} out of ${formatCurrency(TOTAL_FEDERAL_BUDGET_USD)}):\n${budgetSummary}\n\nSuggest 2-3 alternative policy solutions or efficiencies within the '${categoryName}' sector (mention specific subcategories if relevant and if they were detailed in the budget summary) that could help mitigate this negative impact without necessarily restoring full funding to this category. Focus on creative or nuanced approaches, and present them concisely.`;
+                await callGeminiAPI(prompt);
+            }
+
+
+            closeModalButton.addEventListener('click', () => {
+                introModal.style.opacity = '0';
+                introModal.style.pointerEvents = 'none';
+                setTimeout(() => { introModal.style.display = 'none'; }, 300);
+            });
+
+            resetButton.addEventListener('click', resetApp);
+            generateAnalysisButton.addEventListener('click', handleGenerateOverallAnalysis);
+            getAIAdviceButton.addEventListener('click', handleGetAIAdvice);
+            closeAIResponseModalButton.addEventListener('click', () => {
+                aiResponseModal.classList.add('hidden');
+            });
+            
+            generateAnalysisButton.disabled = true;
+
+            // Initial Setup
+            updateToggleLabels();
+            createSliders();
+            initChart();
+            updateAll(); 
+        });
+    </script>
+</body>
+</html>
